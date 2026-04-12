@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 丸背景 -->
+    <path
+        android:fillColor="#2196F3"
+        android:pathData="M54,0
+            C83.82,0 108,24.18 108,54
+            C108,83.82 83.82,108 54,108
+            C24.18,108 0,83.82 0,54
+            C0,24.18 24.18,0 54,0Z" />
+
+    <!-- 地図ピン -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,20
+            C44.06,20 36,28.06 36,38
+            C36,51.5 54,72 54,72
+            C54,72 72,51.5 72,38
+            C72,28.06 63.94,20 54,20Z" />
+
+    <!-- 家 屋根 -->
+    <path
+        android:fillColor="#2196F3"
+        android:pathData="M54,27 L44,35 L64,35 Z" />
+    <!-- 家 壁 -->
+    <path
+        android:fillColor="#2196F3"
+        android:pathData="M46,35 L46,45 L62,45 L62,35 Z" />
+    <!-- ドア -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M51,39 L51,45 L57,45 L57,39
+            C57,37.34 55.66,36 54,36
+            C52.34,36 51,37.34 51,39Z" />
+
+    <!-- ピン下 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M52,70 L52,82 L56,82 L56,70 Z" />
+
+</vector>

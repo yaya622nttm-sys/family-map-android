@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">家族マップ</string>
+    <string name="notification_channel_name">位置情報共有</string>
+    <string name="notification_title">家族マップ</string>
+    <string name="notification_text">位置情報を共有中</string>
+    <string name="setup_title">家族マップへようこそ</string>
+    <string name="setup_name_label">あなたの名前（最大8文字）</string>
+    <string name="setup_name_placeholder">名前を入力</string>
+    <string name="setup_color_label">ピンの色を選んでください</string>
+    <string name="setup_create_room">新しいルームを作成</string>
+    <string name="setup_join_room">ルームに参加</string>
+    <string name="setup_room_code_placeholder">6文字のルームコード</string>
+    <string name="map_title">家族マップ</string>
+    <string name="map_live_badge">LIVE</string>
+    <string name="map_share_code">ルームコードをシェア</string>
+    <string name="map_history">履歴</string>
+    <string name="history_title">移動履歴</string>
+    <string name="history_member_label">メンバー</string>
+    <string name="history_date_label">日付</string>
+    <string name="error_offline">接続を確認してください</string>
+    <string name="error_location_permission">位置情報の許可が必要です</string>
+    <string name="error_name_empty">名前を入力してください</string>
+    <string name="error_room_code_invalid">ルームコードは6文字で入力してください</string>
+    <string name="permission_rationale_title">位置情報の許可が必要です</string>
+    <string name="permission_rationale_message">家族マップは位置情報を使用して家族の現在地を表示します。設定から位置情報のアクセスを許可してください。</string>
+    <string name="permission_go_to_settings">設定を開く</string>
+    <string name="room_code_copied">ルームコードをコピーしました</string>
+    <string name="member_stale">（更新なし）</string>
+</resources>
