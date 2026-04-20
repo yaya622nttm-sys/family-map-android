@@ -36,6 +36,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      # ── gradle-wrapper.jar をダウンロード ──
+      - name: Download Gradle wrapper JAR
+        run: |
+          mkdir -p gradle/wrapper
+          curl -fL -o gradle/wrapper/gradle-wrapper.jar \
+            https://github.com/gradle/gradle/raw/v8.6.0/gradle/wrapper/gradle-wrapper.jar
+
       # ── gradlew に実行権限を付与 ──
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
