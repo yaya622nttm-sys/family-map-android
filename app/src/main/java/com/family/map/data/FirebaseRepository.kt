@@ -86,7 +86,7 @@ class FirebaseRepository {
     // 履歴
     // ──────────────────────────────────────────────────────
 
-    /** 履歴に位置情報を書き込む */
+    /** 履歴に位置情報を書き込む（webアプリと同じpushKey構造） */
     suspend fun saveHistory(
         roomCode: String,
         userId: String,
@@ -94,14 +94,8 @@ class FirebaseRepository {
         lng: Double,
         ts: Long
     ) = suspendCancellableCoroutine<Unit> { cont ->
-        val dateKey = dateKeyFromTs(ts)
-        val ref = db.getReference("rooms/$roomCode/history/$userId/$dateKey/$ts")
-        val data = mapOf(
-            "lat" to lat,
-            "lng" to lng,
-            "ts" to ts
-        )
-        ref.setValue(data)
+        val ref = db.getReference("rooms/$roomCode/history/$userId").push()
+        ref.setValue(mapOf("lat" to lat, "lng" to lng, "ts" to ts))
             .addOnSuccessListener { if (cont.isActive) cont.resume(Unit) }
             .addOnFailureListener { e -> if (cont.isActive) cont.resumeWithException(e) }
     }
@@ -112,17 +106,23 @@ class FirebaseRepository {
         userId: String,
         date: Date
     ): List<LocationPoint> = suspendCancellableCoroutine { cont ->
-        val dateKey = dateKeyFromDate(date)
-        val ref = db.getReference("rooms/$roomCode/history/$userId/$dateKey")
+        val cal = Calendar.getInstance().apply { time = date }
+        val dayStart = cal.apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val dayEnd = dayStart + 24 * 60 * 60 * 1000L
+        val ref = db.getReference("rooms/$roomCode/history/$userId")
         ref.addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 if (!cont.isActive) return
                 val points = snapshot.children.mapNotNull { child ->
                     try {
+                        val ts = child.child("ts").getValue(Long::class.java) ?: return@mapNotNull null
+                        if (ts < dayStart || ts >= dayEnd) return@mapNotNull null
                         LocationPoint(
                             lat = child.child("lat").getValue(Double::class.java) ?: return@mapNotNull null,
                             lng = child.child("lng").getValue(Double::class.java) ?: return@mapNotNull null,
-                            ts = child.child("ts").getValue(Long::class.java) ?: return@mapNotNull null
+                            ts = ts
                         )
                     } catch (e: Exception) {
                         null
@@ -139,28 +139,16 @@ class FirebaseRepository {
 
     /** 7日以上前の履歴を削除する（アプリ起動時に実行） */
     fun cleanupOldHistory(roomCode: String, userId: String) {
-        val cutoff = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -7) }.time
-        val cutoffKey = dateKeyFromDate(cutoff)
+        val weekAgo = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
         val ref = db.getReference("rooms/$roomCode/history/$userId")
         ref.addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                snapshot.children.forEach { dateSnap ->
-                    val dateKey = dateSnap.key ?: return@forEach
-                    if (dateKey < cutoffKey) {
-                        dateSnap.ref.removeValue()
-                    }
+                snapshot.children.forEach { child ->
+                    val ts = child.child("ts").getValue(Long::class.java) ?: 0L
+                    if (ts < weekAgo) child.ref.removeValue()
                 }
             }
             override fun onCancelled(error: DatabaseError) { /* ignore */ }
         })
     }
-
-    // ──────────────────────────────────────────────────────
-    // ユーティリティ
-    // ──────────────────────────────────────────────────────
-
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-
-    private fun dateKeyFromTs(ts: Long): String = dateFormat.format(Date(ts))
-    private fun dateKeyFromDate(date: Date): String = dateFormat.format(date)
 }

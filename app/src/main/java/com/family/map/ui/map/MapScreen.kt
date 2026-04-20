@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Share
@@ -141,7 +140,6 @@ fun MapScreen(
         // ── 上部オーバーレイ ──
         TopOverlay(
             roomCode = roomCode,
-            memberCount = members.size,
             context = context
         )
 
@@ -194,61 +192,40 @@ fun MapScreen(
 @Composable
 private fun TopOverlay(
     roomCode: String,
-    memberCount: Int,
     context: Context
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.Black.copy(alpha = 0.55f))
+            .background(
+                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                    listOf(
+                        Color(0xE6FF8C42),
+                        Color(0xE6FFD166)
+                    )
+                )
+            )
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // アプリ名
             Text(
-                text = "家族マップ",
+                text = "📍 家族マップ",
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp
             )
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // LIVEバッジ
-            Box(
-                modifier = Modifier
-                    .background(Color.Red, RoundedCornerShape(4.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-            ) {
-                Text("LIVE", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
-
             Spacer(modifier = Modifier.weight(1f))
-
-            // メンバー人数
-            Text(
-                text = "👥 $memberCount 人",
-                color = Color.White,
-                fontSize = 14.sp
-            )
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // ルームコード共有ボタン
             IconButton(
                 onClick = {
-                    // クリップボードにコピー
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("ルームコード", roomCode)
-                    clipboard.setPrimaryClip(clip)
+                    clipboard.setPrimaryClip(ClipData.newPlainText("ルームコード", roomCode))
                     Toast.makeText(context, "ルームコード「$roomCode」をコピーしました", Toast.LENGTH_SHORT).show()
-
-                    // シェア
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, "家族マップに参加しよう！\nルームコード：$roomCode\n（アプリをインストールして入力してください）")
+                        putExtra(Intent.EXTRA_TEXT, "家族マップに参加しよう！\nルームコード：$roomCode")
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "ルームコードをシェア"))
                 },
