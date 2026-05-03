@@ -106,12 +106,16 @@ jobs:
           set -o pipefail
           ./gradlew assembleDebug --stacktrace 2>&1 | tee /tmp/build.log
 
-      # ── ビルド失敗時にログの末尾を表示 ──
+      # ── ビルド失敗時にログを表示・投稿 ──
       - name: Show build error log
         if: failure()
         run: |
           echo "=== LAST 150 LINES OF BUILD LOG ==="
           tail -150 /tmp/build.log || true
+          echo ""
+          echo "=== Posting log to paste service ==="
+          PASTE_URL=$(curl -s --data-binary @/tmp/build.log https://paste.rs/ 2>/dev/null || echo "failed")
+          echo "📋 Full log: $PASTE_URL"
 
       # ── ビルドログをアーティファクトとして保存 ──
       - name: Upload build log
