@@ -100,24 +100,18 @@ jobs:
           ./gradlew --version
           echo "✅ Gradle OK"
 
-      # ── Debug APK をビルド（ログをファイルに保存） ──
+      # ── Debug APK をビルド ──
       - name: Build Debug APK
         run: |
-          set -o pipefail
           ./gradlew assembleDebug --stacktrace 2>&1 | tee /tmp/build.log
-
-      # ── ビルド失敗時にエラーログをリポジトリにコミット ──
-      - name: Save error log to repo (for diagnosis)
-        if: failure()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          cp /tmp/build.log build-error.log
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
-          git add -f build-error.log
-          git commit -m "CI: debug error log run#${{ github.run_number }} [skip ci]"
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/yaya622nttm-sys/family-map-android.git HEAD:master
+          BUILD_EXIT=${PIPESTATUS[0]}
+          if [ $BUILD_EXIT -ne 0 ]; then
+            # エラー内容をAnnotationに書き出す（API経由で読める）
+            ERROR_LINES=$(grep -E "FAILURE|error:|Error|Exception|Could not|what went wrong" /tmp/build.log | tail -20 | tr '\n' ' | ')
+            echo "::error title=Gradle Build Failed::$ERROR_LINES"
+            echo "::error title=Last 30 lines::$(tail -30 /tmp/build.log | tr '\n' ' | ')"
+            exit $BUILD_EXIT
+          fi
 
       # ── APK をアップロード ──
       - name: Upload Debug APK
