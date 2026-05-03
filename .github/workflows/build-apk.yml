@@ -5,7 +5,6 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  # 手動実行もできる
   workflow_dispatch:
 
 jobs:
@@ -14,18 +13,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── ソースコードを取得 ──
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── JDK 17 をセットアップ ──
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ── Gradle 8.6 を直接インストールしてラッパーを生成 ──
+      # ── Android SDK ライセンス承認 + 必要コンポーネント確認 ──
+      - name: Setup Android SDK components
+        run: |
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          # sdkmanager のパスを探す
+          SDKMANAGER=""
+          for path in \
+            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "$ANDROID_SDK_ROOT/tools/bin/sdkmanager"; do
+            if [ -f "$path" ]; then
+              SDKMANAGER="$path"
+              break
+            fi
+          done
+          if [ -n "$SDKMANAGER" ]; then
+            echo "sdkmanager found: $SDKMANAGER"
+            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+            "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1 || true
+            echo "✅ Android SDK components installed"
+          else
+            echo "⚠️ sdkmanager not found, using pre-installed SDK"
+            ls "$ANDROID_SDK_ROOT/platforms/" || true
+          fi
+
+      # ── Gradle wrapper を生成 ──
       - name: Install Gradle 8.6 and generate wrapper
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.6-bin.zip -O /tmp/gradle.zip
@@ -34,7 +57,7 @@ jobs:
           chmod +x ./gradlew
           echo "✅ Gradle wrapper generated"
 
-      # ── google-services.json を生成（GitHub Secrets から） ──
+      # ── google-services.json を生成 ──
       - name: Create google-services.json
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
@@ -43,10 +66,10 @@ jobs:
             echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
             echo "✅ google-services.json を Secrets から生成しました"
           else
-            echo "⚠️ GOOGLE_SERVICES_JSON が設定されていません。既存のファイルを使用します"
+            echo "⚠️ GOOGLE_SERVICES_JSON が設定されていません"
           fi
 
-      # ── local.properties を生成（Maps APIキー） ──
+      # ── local.properties を生成 ──
       - name: Create local.properties
         env:
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
@@ -54,17 +77,18 @@ jobs:
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           if [ -n "$MAPS_API_KEY" ]; then
             echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
-            echo "✅ MAPS_API_KEY を Secrets から設定しました"
+            echo "✅ MAPS_API_KEY を設定しました"
           else
             echo "MAPS_API_KEY=PLACEHOLDER_KEY" >> local.properties
-            echo "⚠️ MAPS_API_KEY が設定されていません。プレースホルダーを使用します（地図は表示されません）"
+            echo "⚠️ MAPS_API_KEY が未設定です（地図は表示されません）"
           fi
+          cat local.properties
 
       # ── Debug APK をビルド ──
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
 
-      # ── APK をアップロード（GitHubからダウンロード可能） ──
+      # ── APK をアップロード ──
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
