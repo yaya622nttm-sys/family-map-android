@@ -22,38 +22,27 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # ── Android SDK ライセンス承認 + 必要コンポーネント確認 ──
-      - name: Setup Android SDK components
+      # ── Android SDK ライセンス承認 ──
+      - name: Setup Android SDK
         run: |
-          echo "=== Android SDK Info ==="
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls "$ANDROID_SDK_ROOT/platforms/" 2>/dev/null || echo "No platforms dir"
-          ls "$ANDROID_SDK_ROOT/build-tools/" 2>/dev/null || echo "No build-tools dir"
-          # sdkmanager でライセンス承認 + android-34 確保
           SDKMANAGER=""
-          for p in \
-            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
-            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"; do
+          for p in "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"; do
             [ -f "$p" ] && SDKMANAGER="$p" && break
           done
           if [ -n "$SDKMANAGER" ]; then
             yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-            "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -5 || true
-            echo "✅ SDK components installed"
-          else
-            echo "⚠️ sdkmanager not found"
+            "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1 || true
+            echo "✅ Android SDK ready"
           fi
 
       # ── Gradle wrapper を生成 ──
-      - name: Install Gradle 8.6 and generate wrapper
+      - name: Install Gradle and generate wrapper
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.6-bin.zip -O /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /opt/gradle
           /opt/gradle/gradle-8.6/bin/gradle wrapper --gradle-version 8.6 --distribution-type bin
           chmod +x ./gradlew
           echo "✅ Gradle wrapper generated"
-          cat gradle/wrapper/gradle-wrapper.properties
 
       # ── google-services.json を生成 ──
       - name: Create google-services.json
@@ -62,20 +51,16 @@ jobs:
         run: |
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
-            echo "✅ google-services.json created ($(wc -c < app/google-services.json) bytes)"
-            # JSON の妥当性チェック
-            python3 -c "import json,sys; json.load(open('app/google-services.json')); print('✅ Valid JSON')" || echo "⚠️ Invalid JSON!"
+            echo "✅ google-services.json created"
           else
-            echo "⚠️ GOOGLE_SERVICES_JSON not set"
-            # ダミーファイルを作成（ビルドを通すため）
-            cat > app/google-services.json << 'DUMMY'
+            echo "⚠️ GOOGLE_SERVICES_JSON not set, using dummy"
+            cat > app/google-services.json << 'EOF'
           {
-            "project_info": { "project_id": "dummy", "firebase_url": "https://dummy.firebaseio.com", "storage_bucket": "dummy.appspot.com", "project_number": "000000000000" },
-            "client": [{ "client_info": { "mobilesdk_app_id": "1:000000000000:android:0000000000000000", "android_client_info": { "package_name": "com.family.map" } }, "oauth_client": [], "api_key": [{ "current_key": "" }], "services": { "appinvite_service": { "other_platform_oauth_client": [] } } }],
-            "configuration_version": "1"
+            "project_info": {"project_id":"dummy-proj","firebase_url":"https://dummy-proj-default-rtdb.firebaseio.com","storage_bucket":"dummy-proj.appspot.com","project_number":"123456789000"},
+            "client":[{"client_info":{"mobilesdk_app_id":"1:123456789000:android:abcdef1234567890","android_client_info":{"package_name":"com.family.map"}},"oauth_client":[],"api_key":[{"current_key":"dummy"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],
+            "configuration_version":"1"
           }
-          DUMMY
-            echo "⚠️ Dummy google-services.json created"
+          EOF
           fi
 
       # ── local.properties を生成 ──
@@ -86,36 +71,16 @@ jobs:
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           if [ -n "$MAPS_API_KEY" ]; then
             echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
-            echo "✅ MAPS_API_KEY set"
           else
             echo "MAPS_API_KEY=PLACEHOLDER_KEY" >> local.properties
-            echo "⚠️ Using placeholder MAPS_API_KEY"
           fi
-          echo "--- local.properties ---"
-          cat local.properties
-
-      # ── Gradle の設定確認 ──
-      - name: Verify Gradle setup
-        run: |
-          ./gradlew --version
-          echo "✅ Gradle OK"
 
       # ── Debug APK をビルド ──
       - name: Build Debug APK
-        run: |
-          ./gradlew assembleDebug --stacktrace 2>&1 | tee /tmp/build.log
-          BUILD_EXIT=${PIPESTATUS[0]}
-          if [ $BUILD_EXIT -ne 0 ]; then
-            # エラー内容をAnnotationに書き出す（API経由で読める）
-            ERROR_LINES=$(grep -E "FAILURE|error:|Error|Exception|Could not|what went wrong" /tmp/build.log | tail -20 | tr '\n' ' | ')
-            echo "::error title=Gradle Build Failed::$ERROR_LINES"
-            echo "::error title=Last 30 lines::$(tail -30 /tmp/build.log | tr '\n' ' | ')"
-            exit $BUILD_EXIT
-          fi
+        run: ./gradlew assembleDebug --stacktrace
 
       # ── APK をアップロード ──
       - name: Upload Debug APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: FamilyMap-debug-${{ github.run_number }}
@@ -124,11 +89,10 @@ jobs:
 
       # ── ビルド情報を表示 ──
       - name: Show APK info
-        if: success()
         run: |
           APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
           if [ -f "$APK_PATH" ]; then
             SIZE=$(du -h "$APK_PATH" | cut -f1)
-            echo "✅ APKビルド成功！"
-            echo "📦 ファイルサイズ: $SIZE"
+            echo "✅ APKビルド成功！ファイルサイズ: $SIZE"
+            echo "📥 ActionsタブのArtifactsからダウンロードできます"
           fi
