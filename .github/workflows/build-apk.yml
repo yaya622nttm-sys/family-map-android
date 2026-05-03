@@ -25,27 +25,24 @@ jobs:
       # ── Android SDK ライセンス承認 + 必要コンポーネント確認 ──
       - name: Setup Android SDK components
         run: |
+          echo "=== Android SDK Info ==="
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           echo "ANDROID_HOME=$ANDROID_HOME"
-          # sdkmanager のパスを探す
+          ls "$ANDROID_SDK_ROOT/platforms/" 2>/dev/null || echo "No platforms dir"
+          ls "$ANDROID_SDK_ROOT/build-tools/" 2>/dev/null || echo "No build-tools dir"
+          # sdkmanager でライセンス承認 + android-34 確保
           SDKMANAGER=""
-          for path in \
+          for p in \
             "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
-            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "$ANDROID_SDK_ROOT/tools/bin/sdkmanager"; do
-            if [ -f "$path" ]; then
-              SDKMANAGER="$path"
-              break
-            fi
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"; do
+            [ -f "$p" ] && SDKMANAGER="$p" && break
           done
           if [ -n "$SDKMANAGER" ]; then
-            echo "sdkmanager found: $SDKMANAGER"
             yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-            "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1 || true
-            echo "✅ Android SDK components installed"
+            "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -5 || true
+            echo "✅ SDK components installed"
           else
-            echo "⚠️ sdkmanager not found, using pre-installed SDK"
-            ls "$ANDROID_SDK_ROOT/platforms/" || true
+            echo "⚠️ sdkmanager not found"
           fi
 
       # ── Gradle wrapper を生成 ──
@@ -56,6 +53,7 @@ jobs:
           /opt/gradle/gradle-8.6/bin/gradle wrapper --gradle-version 8.6 --distribution-type bin
           chmod +x ./gradlew
           echo "✅ Gradle wrapper generated"
+          cat gradle/wrapper/gradle-wrapper.properties
 
       # ── google-services.json を生成 ──
       - name: Create google-services.json
@@ -64,9 +62,20 @@ jobs:
         run: |
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
-            echo "✅ google-services.json を Secrets から生成しました"
+            echo "✅ google-services.json created ($(wc -c < app/google-services.json) bytes)"
+            # JSON の妥当性チェック
+            python3 -c "import json,sys; json.load(open('app/google-services.json')); print('✅ Valid JSON')" || echo "⚠️ Invalid JSON!"
           else
-            echo "⚠️ GOOGLE_SERVICES_JSON が設定されていません"
+            echo "⚠️ GOOGLE_SERVICES_JSON not set"
+            # ダミーファイルを作成（ビルドを通すため）
+            cat > app/google-services.json << 'DUMMY'
+          {
+            "project_info": { "project_id": "dummy", "firebase_url": "https://dummy.firebaseio.com", "storage_bucket": "dummy.appspot.com", "project_number": "000000000000" },
+            "client": [{ "client_info": { "mobilesdk_app_id": "1:000000000000:android:0000000000000000", "android_client_info": { "package_name": "com.family.map" } }, "oauth_client": [], "api_key": [{ "current_key": "" }], "services": { "appinvite_service": { "other_platform_oauth_client": [] } } }],
+            "configuration_version": "1"
+          }
+          DUMMY
+            echo "⚠️ Dummy google-services.json created"
           fi
 
       # ── local.properties を生成 ──
@@ -77,19 +86,45 @@ jobs:
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           if [ -n "$MAPS_API_KEY" ]; then
             echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
-            echo "✅ MAPS_API_KEY を設定しました"
+            echo "✅ MAPS_API_KEY set"
           else
             echo "MAPS_API_KEY=PLACEHOLDER_KEY" >> local.properties
-            echo "⚠️ MAPS_API_KEY が未設定です（地図は表示されません）"
+            echo "⚠️ Using placeholder MAPS_API_KEY"
           fi
+          echo "--- local.properties ---"
           cat local.properties
 
-      # ── Debug APK をビルド ──
+      # ── Gradle の設定確認 ──
+      - name: Verify Gradle setup
+        run: |
+          ./gradlew --version
+          echo "✅ Gradle OK"
+
+      # ── Debug APK をビルド（ログをファイルに保存） ──
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee /tmp/build.log
+
+      # ── ビルド失敗時にログの末尾を表示 ──
+      - name: Show build error log
+        if: failure()
+        run: |
+          echo "=== LAST 150 LINES OF BUILD LOG ==="
+          tail -150 /tmp/build.log || true
+
+      # ── ビルドログをアーティファクトとして保存 ──
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.run_number }}
+          path: /tmp/build.log
+          retention-days: 7
 
       # ── APK をアップロード ──
       - name: Upload Debug APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: FamilyMap-debug-${{ github.run_number }}
@@ -98,11 +133,11 @@ jobs:
 
       # ── ビルド情報を表示 ──
       - name: Show APK info
+        if: success()
         run: |
           APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
           if [ -f "$APK_PATH" ]; then
             SIZE=$(du -h "$APK_PATH" | cut -f1)
             echo "✅ APKビルド成功！"
             echo "📦 ファイルサイズ: $SIZE"
-            echo "📥 ActionsタブのArtifactsからダウンロードできます"
           fi
